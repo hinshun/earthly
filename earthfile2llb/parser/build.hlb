@@ -19,7 +19,7 @@ fs runAntlr() {
         run 'java -Xmx500M -cp "/usr/local/lib/antlr-4.8-complete.jar:$CLASSPATH" org.antlr.v4.Tool -Dlanguage=Go -lib EarthLexer.g4 -lib EarthParser.g4 EarthLexer.g4 EarthParser.g4' with option {
 		dir "/earthly"
 		mount fs {
-			local "./earthfile2llb/parser" with option {
+			local "." with option {
 				includePatterns "*.g4"
 			}
 		} "/earthly" as antlrOutput

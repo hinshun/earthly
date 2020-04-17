@@ -21,7 +21,7 @@ fs build() {
 }
 
 fs sources() {
-        local "./buildkitd" with option {
+        local "." with option {
         	includePatterns "envcredhelper.sh" "entrypoint.sh" "buildkitd.toml.template"
         }
 }
