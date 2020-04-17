@@ -1,0 +1,146 @@
+import parser "./earthfile2llb/parser/build.hlb"
+
+import buildkitd "./buildkitd/build.hlb"
+
+group default() {
+	all
+}
+
+fs base() {
+	image "golang:1.13-alpine3.11" with option { resolve; }
+	run "apk add --update --no-cache bash bash-completion binutils ca-certificates coreutils curl findutils g++ git grep less make openssl util-linux"
+	dir "/earthly"
+}
+
+group lint() {
+	parallel ineffassign goimports golint govet
+}
+
+fs ineffassign() {
+	base
+	run "go get github.com/gordonklaus/ineffassign"
+	run "ineffassign ." with option { mountCode; }
+}
+
+fs goimports() {
+	base
+	run "go get golang.org/x/tools/cmd/goimports"
+	run "goimports -d ." with option { mountCode; }
+}
+
+fs golint() {
+	base
+	run "go get golang.org/x/lint/golint"
+	run "go lint -set_exit_status ." with option { mountCode; }
+}
+
+fs govet() {
+	base
+	run "go vet ./..." with option { mountCode; }
+}
+
+option::run mountGoCache() {
+	env "GOCACHE" "/go-cache"
+	mount scratch "/go-cache" with option { cache "earthly/go-cache" "shared"; }
+	mount scratch "/go/pkg" with option { cache "earthly/go-pkg" "shared"; }
+}
+
+option::run mountCode() {
+	mount fs {
+		packageSources
+		copy fs {
+			local "." with option {
+				includePatterns "go.mod" "go.sum"
+			}
+		} "/" "/" with contentsOnly
+	} "/earthly"
+	mount buildkitdSources "/earthly/buildkitd"
+	mount earthfile2llbSources "/earthly/earthfile2llb"
+	mount parser.generate "/earthly/earthfile2llb/parser"
+}
+
+fs packageSources() {
+	local "." with option {
+		includePatterns "buildcontext" "builder" "cleanup" "cmd" "conslogging" "dockertar" "domain" "llbutil" "logging"
+	}
+}
+
+fs buildkitdSources() {
+	local "./buildkitd" with option {
+		includePatterns "buildkitd.go" "settings.go"
+	}
+}
+
+fs earthfile2llbSources() {
+	local "./earthfile2llb" with option {
+		includePatterns "antlrhandler" "dedup" "image" "imr" "variables" "*.go"
+	}
+}
+
+fs earth(string goos, string goarch, string ldflags, string version) {
+	earthOut goos goarch ldflags version
+	download string {
+		format "build/%s/%s" goos goarch
+	}
+}
+
+fs buildEarth(string goos, string goarch, string ldflags, string version) {
+	base
+	run "test -n \"$GOOS\" && test -n \"$GOARCH\"" with option {
+		env "GOOS" goos
+		env "GOARCH" goarch
+	}
+	run "go build -ldflags \"-X main.DefaultBuildkitdImage=$DEFAULT_BUILDKITD_IMAGE -X main.Version=$VERSION $GO_EXTRA_LDFLAGS\" -o /out/earth cmd/earth/*.go" with option {
+		env "GOOS" goos
+		env "GOARCH" goarch
+		env "GO_EXTRA_LDFLAGS" ldflags
+		env "VERSION" version
+		env "DEFAULT_BUILDKITD_IMAGE" string {
+			format "earthly/buildkitd:%s" version
+		}
+		mountCode
+		mountGoCache
+		mount scratch "/out" as earthOut
+	}
+}
+
+fs earthLinux() {
+	earth "linux" "amd64" "-linkmode external -extldflags -static" ""
+}
+
+fs earthDarwin() {
+	earth "darwin" "amd64" "" ""
+}
+
+group earthAll() {
+	parallel earthLinux earthDarwin
+}
+
+fs earthDocker() {
+	buildkitd.build
+	run "apk add --update --no-cache docker-cli"
+	env "ENABLE_LOOP_DEVICE" "false"
+	copy fs {
+		local "." with option {
+			includePatterns "earth-buildkitd-wrapper.sh"
+		}
+	} "earth-buildkitd-wrapper.sh" "/usr/bin/earth-buildkitd-wrapper.sh"
+	copy earthLinux "earth" "/usr/bin/earth"
+	dockerLoad "earthly/earth"
+}
+
+group all() {
+	parallel earthAll earthDocker buildkitd.build
+}
+
+# group test() {
+# 	parallel lint examples.test examplesAll
+# }
+
+# group examplesAll() {
+# 	parallel go.docker java.docker js.docker monorepo.All multirepo.docker readme.parallel readme.finalSucessTarget
+# }
+
+# fs testExperimental() {
+# 	tests.experimental
+# }

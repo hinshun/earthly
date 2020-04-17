@@ -1,0 +1,27 @@
+export generate
+
+fs default() {
+	generate
+}
+
+fs generate() {
+	antlrOutput
+	download "."
+}
+
+fs runAntlr() {
+	image "golang:1.13-alpine3.11"
+	run "apk add --update --no-cache openjdk11 openssl ca-certificates curl"
+	run "curl -O https://www.antlr.org/download/antlr-4.8-complete.jar" with option {
+		dir "/usr/local/lib"
+	}
+	dir "/earthly"
+        run 'java -Xmx500M -cp "/usr/local/lib/antlr-4.8-complete.jar:$CLASSPATH" org.antlr.v4.Tool -Dlanguage=Go -lib EarthLexer.g4 -lib EarthParser.g4 EarthLexer.g4 EarthParser.g4' with option {
+		dir "/earthly"
+		mount fs {
+			local "./earthfile2llb/parser" with option {
+				includePatterns "*.g4"
+			}
+		} "/earthly" as antlrOutput
+	}
+}
