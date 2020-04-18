@@ -8,7 +8,23 @@ group default() {
 
 fs base() {
 	image "golang:1.13-alpine3.11" with option { resolve; }
-	run "apk add --update --no-cache bash bash-completion binutils ca-certificates coreutils curl findutils g++ git grep less make openssl util-linux"
+	run <<-APK
+		apk add --update --no-cache \
+			bash \
+			bash-completion \
+			binutils \
+			ca-certificates \
+			coreutils \
+			curl \
+			findutils \
+			g++ \
+			git \
+			grep \
+			less \
+			make \
+			openssl \
+			util-linux
+	APK
 	dir "/earthly"
 }
 
@@ -53,10 +69,10 @@ option::run mountCode() {
 				includePatterns "go.mod" "go.sum"
 			}
 		} "/" "/" with contentsOnly
-	} "/earthly"
-	mount buildkitdSources "/earthly/buildkitd"
-	mount earthfile2llbSources "/earthly/earthfile2llb"
-	mount parser.generate "/earthly/earthfile2llb/parser"
+        	copy buildkitdSources "/" "/buildkitd"
+		copy earthfile2llbSources "/" "/earthfile2llb"
+		copy fs { parser.generate; } "/" "/earthfile2llb/parser"
+	} "/earthly" with readonly
 }
 
 fs packageSources() {
@@ -90,7 +106,13 @@ fs buildEarth(string goos, string goarch, string ldflags, string version) {
 		env "GOOS" goos
 		env "GOARCH" goarch
 	}
-	run "go build -ldflags \"-X main.DefaultBuildkitdImage=$DEFAULT_BUILDKITD_IMAGE -X main.Version=$VERSION $GO_EXTRA_LDFLAGS\" -o /out/earth cmd/earth/*.go" with option {
+	run <<-GO
+		go build \
+			-ldflags "-X main.DefaultBuildkitdImage=$DEFAULT_BUILDKITD_IMAGE \
+			-X main.Version=$VERSION $GO_EXTRA_LDFLAGS" \
+			-o /out/earth \
+			cmd/earth/*.go
+	GO with option {
 		env "GOOS" goos
 		env "GOARCH" goarch
 		env "GO_EXTRA_LDFLAGS" ldflags

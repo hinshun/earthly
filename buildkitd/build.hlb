@@ -6,7 +6,15 @@ fs default() {
 
 fs build() {
 	image "moby/buildkit:master@sha256:9f58891c60f4075cef38296033f6d78fb92168b65367982af97a165f33e4898d"
-	run "apk add --update --no-cache openssh-client pigz xz fuse3 e2fsprogs util-linux"
+	run <<-APK
+		apk add --update --no-cache \
+			openssh-client \
+			pigz \
+			xz \
+			fuse3 \
+			e2fsprogs \
+			util-linux
+	APK
 	mkdir "/root/.ssh" 0o755
 	mkfile "/root/.ssh/known_hosts" 0o644 "github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ=="
 	copy sources "*.sh" "/usr/bin" with option { allowWildcard; }
@@ -28,8 +36,26 @@ fs sources() {
 
 fs buildFuse() {
 	image "debian:10"
-	run "apt-get update && apt-get install --no-install-recommends -y git ca-certificates libc6-dev gcc make automake autoconf pkgconf libfuse3-dev file"
-        run './autogen.sh && LIBS="-ldl" LDFLAGS="-static" ./configure && make && cp fuse-overlayfs /out && file /out/fuse-overlayfs | grep "statically linked"' with option {
+	run <<-APT
+		apt-get update && apt-get install --no-install-recommends -y \
+			git \
+			ca-certificates \
+			libc6-dev \
+			gcc \
+			make \
+			automake \
+			autoconf \
+			pkgconf \
+			libfuse3-dev \
+			file
+	APT
+        run <<-BUILD
+		./autogen.sh && \
+		LIBS="-ldl" LDFLAGS="-static" ./configure && \
+		make && \
+		cp fuse-overlayfs /out && \
+		file /out/fuse-overlayfs | grep "statically linked"
+	BUILD with option {
 		dir "fuse-overlayfs"
 		mount fs {
 			git "https://github.com/containers/fuse-overlayfs" "v0.7.6"
